@@ -1,0 +1,35 @@
+
+DECLARE
+    tutor_id INTEGER;
+    parcela_valor NUMERIC(10, 2);
+    i INTEGER := 1;
+BEGIN
+    IF NEW.situacao_codigo = 2 AND OLD.situacao_codigo <> 2 THEN
+        SELECT tutor_codigo INTO tutor_id
+        FROM animal
+        WHERE animal_codigo = NEW.animal_codigo;
+
+        UPDATE tutor
+        SET saldodevedor = saldodevedor + NEW.valor
+        WHERE tutor_codigo = tutor_id;
+
+        IF NEW.parcelas > 0 THEN
+            parcela_valor := NEW.valor / NEW.parcelas;
+
+            WHILE i <= NEW.parcelas LOOP
+                INSERT INTO parcela (atendimento_sequencia, numero, vencimento, valor, pagamento, valor_pago)
+                VALUES (
+                    NEW.atendimento_sequencia,
+                    i,
+                    CURRENT_DATE + (i * 30),
+                    parcela_valor, 
+                    NULL,
+                    0
+                );
+                i := i + 1;
+            END LOOP;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
