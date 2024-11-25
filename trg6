@@ -1,0 +1,34 @@
+
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE atendimento
+        SET valor = valor + (
+            SELECT v.valor * NEW.quantidade
+            FROM vacina v
+            WHERE v.vacina_codigo = NEW.vacina_codigo
+        )
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+
+    ELSIF TG_OP = 'UPDATE' THEN
+        UPDATE atendimento
+        SET valor = valor
+                  - (SELECT v.valor * OLD.quantidade
+                     FROM vacina v
+                     WHERE v.vacina_codigo = OLD.vacina_codigo)
+                  + (SELECT v.valor * NEW.quantidade
+                     FROM vacina v
+                     WHERE v.vacina_codigo = NEW.vacina_codigo)
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE atendimento
+        SET valor = valor - (
+            SELECT v.valor * OLD.quantidade
+            FROM vacina v
+            WHERE v.vacina_codigo = OLD.vacina_codigo
+        )
+        WHERE atendimento_sequencia = OLD.atendimento_sequencia;
+    END IF;
+
+    RETURN NEW;
+END;
