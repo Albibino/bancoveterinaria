@@ -1,0 +1,8 @@
+
+BEGIN
+    UPDATE produto
+    SET estoque = estoque + NEW.quantidade
+    WHERE produto_codigo = NEW.produto_codigo;
+
+    RETURN NEW;
+END;
