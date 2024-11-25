@@ -1,0 +1,288 @@
+CREATE OR REPLACE FUNCTION atualizar_valor_atendimento_vacina()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE atendimento
+    SET valor = valor + (
+        SELECT v.valor * NEW.quantidade
+        FROM vacina v
+        WHERE v.vacina_codigo = NEW.vacina_codigo
+    )
+    WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_atualizar_valor_atendimento_vacina
+AFTER INSERT ON atendimento_vacina
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_valor_atendimento_vacina();
+
+CREATE OR REPLACE FUNCTION atualizar_valor_atendimento_vacina()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE atendimento
+        SET valor = valor + (
+            SELECT v.valor * NEW.quantidade
+            FROM vacina v
+            WHERE v.vacina_codigo = NEW.vacina_codigo
+        )
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+
+    ELSIF TG_OP = 'UPDATE' THEN
+        UPDATE atendimento
+        SET valor = valor
+                  - (SELECT v.valor * OLD.quantidade
+                     FROM vacina v
+                     WHERE v.vacina_codigo = OLD.vacina_codigo)
+                  + (SELECT v.valor * NEW.quantidade
+                     FROM vacina v
+                     WHERE v.vacina_codigo = NEW.vacina_codigo)
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE atendimento
+        SET valor = valor - (
+            SELECT v.valor * OLD.quantidade
+            FROM vacina v
+            WHERE v.vacina_codigo = OLD.vacina_codigo
+        )
+        WHERE atendimento_sequencia = OLD.atendimento_sequencia;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_inserir_valor_atendimento_vacina
+AFTER INSERT ON atendimento_vacina
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_valor_atendimento_vacina();
+
+CREATE TRIGGER trg_atualizar_valor_atendimento_vacina
+AFTER UPDATE ON atendimento_vacina
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_valor_atendimento_vacina();
+
+CREATE TRIGGER trg_deletar_valor_atendimento_vacina
+AFTER DELETE ON atendimento_vacina
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_valor_atendimento_vacina();
+
+CREATE OR REPLACE FUNCTION fechar_atendimento()
+RETURNS TRIGGER AS $$
+DECLARE
+    tutor_id INTEGER;
+    parcela_valor NUMERIC(10, 2);
+    i INTEGER := 1;
+BEGIN
+    IF NEW.situacao_codigo = 2 AND OLD.situacao_codigo <> 2 THEN
+        SELECT tutor_codigo INTO tutor_id
+        FROM animal
+        WHERE animal_codigo = NEW.animal_codigo;
+
+        UPDATE tutor
+        SET saldodevedor = saldodevedor + NEW.valor
+        WHERE tutor_codigo = tutor_id;
+
+        IF NEW.parcelas > 0 THEN
+            parcela_valor := NEW.valor / NEW.parcelas;
+
+            WHILE i <= NEW.parcelas LOOP
+                INSERT INTO parcela (atendimento_sequencia, numero, vencimento, valor, pagamento, valor_pago)
+                VALUES (
+                    NEW.atendimento_sequencia,
+                    i, 
+                    CURRENT_DATE + (i * 30), 
+                    parcela_valor,
+                    NULL, 
+                    0 
+                );
+                i := i + 1;
+            END LOOP;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_fechar_atendimento
+AFTER UPDATE ON atendimento
+FOR EACH ROW
+EXECUTE FUNCTION fechar_atendimento();
+
+CREATE OR REPLACE FUNCTION atualizar_valor_atendimento_prod_serv()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_TABLE_NAME = 'atendimento_produto' THEN
+        UPDATE atendimento
+        SET valor = valor + (
+            SELECT p.valor * NEW.quantidade
+            FROM produto p
+            WHERE p.produto_codigo = NEW.produto_codigo
+        )
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+    END IF;
+
+    IF TG_TABLE_NAME = 'atendimento_servico' THEN
+        UPDATE atendimento
+        SET valor = valor + (
+            SELECT s.valor * NEW.quantidade
+            FROM servico s
+            WHERE s.servico_codigo = NEW.servico_codigo
+        )
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_atualizar_valor_atendimento_produto
+AFTER INSERT ON atendimento_produto
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_valor_atendimento_prod_serv();
+
+CREATE TRIGGER trg_atualizar_valor_atendimento_servico
+AFTER INSERT ON atendimento_servico
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_valor_atendimento_prod_serv();
+
+CREATE OR REPLACE FUNCTION atualizar_estoque_produto()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE produto
+        SET estoque = estoque - NEW.quantidade
+        WHERE produto_codigo = NEW.produto_codigo;
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        UPDATE produto
+        SET estoque = estoque + (OLD.quantidade - NEW.quantidade)
+        WHERE produto_codigo = NEW.produto_codigo;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        UPDATE produto
+        SET estoque = estoque + OLD.quantidade
+        WHERE produto_codigo = OLD.produto_codigo;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_atualizar_estoque_inserir
+AFTER INSERT ON atendimento_produto
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_estoque_produto();
+
+CREATE TRIGGER trg_atualizar_estoque_atualizar
+AFTER UPDATE ON atendimento_produto
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_estoque_produto();
+
+CREATE TRIGGER trg_atualizar_estoque_excluir
+AFTER DELETE ON atendimento_produto
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_estoque_produto();
+
+CREATE OR REPLACE FUNCTION atualizar_estoque_aquisicao()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE produto
+    SET estoque = estoque + NEW.quantidade
+    WHERE produto_codigo = NEW.produto_codigo;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_atualizar_estoque_aquisicao
+AFTER INSERT ON aquisicao
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_estoque_aquisicao();
+
+CREATE OR REPLACE FUNCTION atualizar_saldo_devedor()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.pagamento IS NOT NULL THEN
+        UPDATE tutor
+        SET saldodevedor = saldodevedor - NEW.valor
+        WHERE tutor_codigo = (
+            SELECT t.tutor_codigo
+            FROM atendimento a
+            JOIN animal an ON a.animal_codigo = an.animal_codigo
+            JOIN tutor t ON an.tutor_codigo = t.tutor_codigo
+            WHERE a.atendimento_sequencia = NEW.atendimento_sequencia
+        );
+    END IF;
+
+    IF OLD.pagamento IS NOT NULL AND NEW.pagamento IS NULL THEN
+        UPDATE tutor
+        SET saldodevedor = saldodevedor + NEW.valor
+        WHERE tutor_codigo = (
+            SELECT t.tutor_codigo
+            FROM atendimento a
+            JOIN animal an ON a.animal_codigo = an.animal_codigo
+            JOIN tutor t ON an.tutor_codigo = t.tutor_codigo
+            WHERE a.atendimento_sequencia = NEW.atendimento_sequencia
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_atualizar_saldo_devedor
+AFTER UPDATE ON parcela
+FOR EACH ROW
+EXECUTE FUNCTION atualizar_saldo_devedor();
+
+CREATE OR REPLACE FUNCTION aplicar_descontos()
+RETURNS TRIGGER AS $$
+DECLARE
+    desconto_servico NUMERIC(10, 2);
+    desconto_produto NUMERIC(10, 2);
+    valor_total NUMERIC(10, 2) := 0;
+BEGIN
+    IF TG_TABLE_NAME = 'atendimento_servico' THEN
+        SELECT t.desconto
+        INTO desconto_servico
+        FROM servico s
+        JOIN tipo t ON s.tipo_codigo = t.tipo_codigo
+        WHERE s.servico_codigo = NEW.servico_codigo;
+
+        UPDATE atendimento
+        SET valor = valor + (NEW.quantidade * (SELECT valor FROM servico WHERE servico_codigo = NEW.servico_codigo) * (1 - desconto_servico / 100))
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+    END IF;
+
+    IF TG_TABLE_NAME = 'atendimento_produto' THEN
+        SELECT c.desconto
+        INTO desconto_produto
+        FROM produto p
+        JOIN categoria c ON p.categoria_codigo = c.categoria_codigo
+        WHERE p.produto_codigo = NEW.produto_codigo;
+
+        UPDATE atendimento
+        SET valor = valor + (NEW.quantidade * (SELECT valor FROM produto WHERE produto_codigo = NEW.produto_codigo) * (1 - desconto_produto / 100))
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_aplicar_desconto_servico
+AFTER INSERT OR UPDATE ON atendimento_servico
+FOR EACH ROW
+EXECUTE FUNCTION aplicar_descontos();
+
+CREATE TRIGGER trg_aplicar_desconto_produto
+AFTER INSERT OR UPDATE ON atendimento_produto
+FOR EACH ROW
+EXECUTE FUNCTION aplicar_descontos();
