@@ -1,0 +1,32 @@
+
+DECLARE
+    desconto_servico NUMERIC(10, 2);
+    desconto_produto NUMERIC(10, 2);
+    valor_total NUMERIC(10, 2) := 0;
+BEGIN
+    IF TG_TABLE_NAME = 'atendimento_servico' THEN
+        SELECT t.desconto
+        INTO desconto_servico
+        FROM servico s
+        JOIN tipo t ON s.tipo_codigo = t.tipo_codigo
+        WHERE s.servico_codigo = NEW.servico_codigo;
+
+        UPDATE atendimento
+        SET valor = valor + (NEW.quantidade * (SELECT valor FROM servico WHERE servico_codigo = NEW.servico_codigo) * (1 - desconto_servico / 100))
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+    END IF;
+
+    IF TG_TABLE_NAME = 'atendimento_produto' THEN
+        SELECT c.desconto
+        INTO desconto_produto
+        FROM produto p
+        JOIN categoria c ON p.categoria_codigo = c.categoria_codigo
+        WHERE p.produto_codigo = NEW.produto_codigo;
+
+        UPDATE atendimento
+        SET valor = valor + (NEW.quantidade * (SELECT valor FROM produto WHERE produto_codigo = NEW.produto_codigo) * (1 - desconto_produto / 100))
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+    END IF;
+
+    RETURN NEW;
+END;
