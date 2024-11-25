@@ -1,0 +1,24 @@
+
+BEGIN
+    IF TG_TABLE_NAME = 'atendimento_produto' THEN
+        UPDATE atendimento
+        SET valor = valor + (
+            SELECT p.valor * NEW.quantidade
+            FROM produto p
+            WHERE p.produto_codigo = NEW.produto_codigo
+        )
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+    END IF;
+
+    IF TG_TABLE_NAME = 'atendimento_servico' THEN
+        UPDATE atendimento
+        SET valor = valor + (
+            SELECT s.valor * NEW.quantidade
+            FROM servico s
+            WHERE s.servico_codigo = NEW.servico_codigo
+        )
+        WHERE atendimento_sequencia = NEW.atendimento_sequencia;
+    END IF;
+
+    RETURN NEW;
+END;
