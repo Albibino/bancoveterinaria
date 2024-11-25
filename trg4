@@ -1,0 +1,28 @@
+
+BEGIN
+    IF NEW.pagamento IS NOT NULL THEN
+        UPDATE tutor
+        SET saldodevedor = saldodevedor - NEW.valor
+        WHERE tutor_codigo = (
+            SELECT t.tutor_codigo
+            FROM atendimento a
+            JOIN animal an ON a.animal_codigo = an.animal_codigo
+            JOIN tutor t ON an.tutor_codigo = t.tutor_codigo
+            WHERE a.atendimento_sequencia = NEW.atendimento_sequencia
+        );
+    END IF;
+
+    IF OLD.pagamento IS NOT NULL AND NEW.pagamento IS NULL THEN
+        UPDATE tutor
+        SET saldodevedor = saldodevedor + NEW.valor
+        WHERE tutor_codigo = (
+            SELECT t.tutor_codigo
+            FROM atendimento a
+            JOIN animal an ON a.animal_codigo = an.animal_codigo
+            JOIN tutor t ON an.tutor_codigo = t.tutor_codigo
+            WHERE a.atendimento_sequencia = NEW.atendimento_sequencia
+        );
+    END IF;
+
+    RETURN NEW;
+END;
