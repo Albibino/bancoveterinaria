@@ -1,0 +1,22 @@
+
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE produto
+        SET estoque = estoque - NEW.quantidade
+        WHERE produto_codigo = NEW.produto_codigo;
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        UPDATE produto
+        SET estoque = estoque + (OLD.quantidade - NEW.quantidade)
+        WHERE produto_codigo = NEW.produto_codigo;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        UPDATE produto
+        SET estoque = estoque + OLD.quantidade
+        WHERE produto_codigo = OLD.produto_codigo;
+    END IF;
+
+    RETURN NEW;
+END;
